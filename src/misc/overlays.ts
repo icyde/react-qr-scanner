@@ -30,8 +30,8 @@ export function boundingBox(detectedCodes: IDetectedBarcode[], ctx: CanvasRender
     }
 }
 
-export function centerText(detectedCodes: IDetectedBarcode[], ctx: CanvasRenderingContext2D) {
-    detectedCodes.forEach((detectedCode) => {
+export function centerText(detectedCodes: IDetectedBarcode[], ctx: CanvasRenderingContext2D, valid: boolean[]) {
+    detectedCodes.forEach((detectedCode, index) => {
         const { boundingBox, rawValue } = detectedCode;
         const centerX = boundingBox.x + boundingBox.width / 2;
         const centerY = boundingBox.y + boundingBox.height / 2;
@@ -69,7 +69,7 @@ export function centerText(detectedCodes: IDetectedBarcode[], ctx: CanvasRenderi
         ctx.lineTo(rectX, rectY + radius);
         ctx.quadraticCurveTo(rectX, rectY, rectX + radius, rectY);
         ctx.closePath();
-        ctx.fillStyle = 'rgba(255, 255, 0, 0.9)';
+        ctx.fillStyle = valid[index] ? '#3A5DAE' : '#D73B3B';
         ctx.fill();
 
         lines.forEach((line, index) => {
@@ -115,7 +115,7 @@ export function centerText(detectedCodes: IDetectedBarcode[], ctx: CanvasRenderi
                 }
             });
 
-            ctx.fillStyle = 'black';
+            ctx.fillStyle = 'white';
             const remainingLine = line.substring(lastIndex);
             ctx.fillText(remainingLine, currentX, y);
         });

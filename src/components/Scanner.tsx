@@ -38,7 +38,40 @@ function clearCanvas(canvas: HTMLCanvasElement | null) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 }
 
-function onFound(detectedCodes: IDetectedBarcode[], videoEl?: HTMLVideoElement | null, trackingEl?: HTMLCanvasElement | null, tracker?: TrackFunction) {
+interface Item {
+    name: string;
+    price: number;
+    description: string;
+}
+
+interface ErrorResponse {
+    error: string;
+}
+
+type ItemResponse = Item | ErrorResponse;
+
+const fetchItemsWithDelay = async (barcodes: string[]): Promise<{ items: ItemResponse[]; valid: boolean[] }> => {
+    const itemsDatabase: { [key: string]: { name: string; price: number; description: string } } = {
+        'A-0090-Z': { name: 'Item A', price: 10.99, description: 'Description for Item A.' },
+        'A-0060-Z': { name: 'Item B', price: 12.99, description: 'Description for Item B.' },
+        'A-0030-Z': { name: 'Item C', price: 8.99, description: 'Description for Item C.' }
+    };
+    return new Promise((resolve) => {
+        setTimeout(() => {
+            const items = barcodes.map((barcode) => itemsDatabase[barcode] || { error: `Item not found for barcode: ${barcode}` });
+            const valid = items.map((item) => !('error' in item));
+            resolve({ items, valid });
+        }, 1000); // 1 second delay
+    });
+};
+
+function onFound(
+    detectedCodes: IDetectedBarcode[],
+    videoEl?: HTMLVideoElement | null,
+    trackingEl?: HTMLCanvasElement | null,
+    tracker?: TrackFunction,
+    setBarcodeSet?: React.Dispatch<React.SetStateAction<Set<string>>>
+) {
     const canvas = trackingEl;
 
     if (canvas === undefined || canvas === null) {
@@ -113,11 +146,28 @@ function onFound(detectedCodes: IDetectedBarcode[], videoEl?: HTMLVideoElement |
             throw new Error('onFound handler should only be called when component is mounted. Thus tracking canvas 2D context is always defined.');
         }
 
-        tracker(adjustedCodes, ctx);
+        // Fetch items and update barcode set
+        const barcodes = detectedCodes.map((barcode) => barcode.rawValue);
+        fetchItemsWithDelay(barcodes).then(({ items, valid }) => {
+            const newSet = new Set<string>(detectedCodes.map((code) => code.rawValue));
+            if (setBarcodeSet) {
+                setBarcodeSet((prevSet) => {
+                    const updatedSet = new Set(prevSet);
+                    newSet.forEach((barcode) => {
+                        if (!updatedSet.has(barcode)) {
+                            updatedSet.add(barcode);
+                        }
+                    });
+                    return updatedSet;
+                });
+            }
+            tracker(adjustedCodes, ctx, valid);
+        });
     }
 }
 
 export function Scanner(props: IScannerProps) {
+    console.log('Start Scanner');
     const { onScan, constraints, formats = ['qr_code'], paused = false, components, children, styles, classNames, allowMultiple, scanDelay, onError } = props;
 
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -134,14 +184,36 @@ export function Scanner(props: IScannerProps) {
 
     const camera = useCamera();
 
+    const [barcodeSet, setBarcodeSet] = useState(new Set<string>());
+
+    interface UsePoll {
+        (callback: () => void, interval: number): void;
+    }
+
+    const usePoll: UsePoll = (callback, interval) => {
+        useEffect(() => {
+            const id = setInterval(() => {
+                callback();
+            }, interval);
+
+            // Cleanup the interval on component unmount
+            return () => clearInterval(id);
+        }, [callback, interval]); // Dependencies: callback and interval
+    };
+
+    usePoll(() => {
+        console.log('Polling');
+        clearCanvas(trackingLayerRef.current);
+    }, 1000);
+
     const { startScanning, stopScanning } = useScanner({
         videoElementRef: videoRef,
         onScan: onScan,
-        onFound: (detectedCodes) => onFound(detectedCodes, videoRef.current, trackingLayerRef.current, mergedComponents.tracker),
+        onFound: (detectedCodes) => onFound(detectedCodes, videoRef.current, trackingLayerRef.current, mergedComponents.tracker, setBarcodeSet),
         formats: formats,
         audio: mergedComponents.audio,
         allowMultiple: allowMultiple,
-        retryDelay: mergedComponents.tracker === undefined ? 500 : 10,
+        retryDelay: mergedComponents.tracker === undefined ? 500 : 500,
         scanDelay: scanDelay
     });
 
@@ -330,6 +402,9 @@ export function Scanner(props: IScannerProps) {
                     />
                 )}
                 {children}
+            </div>
+            <div>
+                <button>{barcodeSet.size} items</button>
             </div>
         </div>
     );

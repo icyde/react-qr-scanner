@@ -21,6 +21,7 @@ function Template(args: IScannerProps) {
     const [pause, setPause] = useState(false);
 
     const devices = useDevices();
+    const [barcodeSet, setBarcodeSet] = useState(new Set<string>());
 
     function getTracker() {
         switch (tracker) {
@@ -29,6 +30,8 @@ function Template(args: IScannerProps) {
             case 'boundingBox':
                 return boundingBox;
             case 'centerText':
+                return centerText;
+            case 'centerText2':
                 return centerText;
             default:
                 return undefined;
@@ -51,6 +54,7 @@ function Template(args: IScannerProps) {
                 </select>
                 <select style={{ marginLeft: 5 }} onChange={(e) => setTracker(e.target.value)}>
                     <option value="centerText">Center Text</option>
+                    <option value="centerText2">Center Text 2</option>
                     <option value="outline">Outline</option>
                     <option value="boundingBox">Bounding Box</option>
                     <option value={undefined}>No Tracker</option>
@@ -85,7 +89,19 @@ function Template(args: IScannerProps) {
                     deviceId: deviceId
                 }}
                 onScan={(detectedCodes) => {
-                    action('onScan')(detectedCodes);
+                    const newSet = new Set<string>(detectedCodes.map((code) => code.rawValue));
+                    if (setBarcodeSet) {
+                        setBarcodeSet((prevSet) => {
+                            const updatedSet = new Set(prevSet);
+                            newSet.forEach((barcode) => {
+                                if (!updatedSet.has(barcode)) {
+                                    updatedSet.add(barcode);
+                                }
+                            });
+                            console.log('New barcodes:', updatedSet);
+                            return updatedSet;
+                        });
+                    }
                 }}
                 onError={(error) => {
                     console.log(`onError: ${error}'`);
@@ -95,11 +111,11 @@ function Template(args: IScannerProps) {
                     onOff: true,
                     torch: true,
                     zoom: true,
-                    finder: true,
+                    finder: false,
                     tracker: getTracker()
                 }}
-                allowMultiple={true}
-                scanDelay={2000}
+                allowMultiple={false}
+                scanDelay={3000}
                 paused={pause}
             />
         </div>
